@@ -57,6 +57,7 @@ class DeviceDetailActivity : AppCompatActivity() {
   private val app by lazy { application as ThingAlertApp }
   private val repository by lazy { app.repository }
   private val enrichmentRepository by lazy { app.deviceEnrichmentRepository }
+  private val affinityGroupRepository by lazy { app.affinityGroupRepository }
   private val queryClient by lazy {
     BleDeviceInfoQueryClient(
       context = this,
@@ -114,7 +115,8 @@ class DeviceDetailActivity : AppCompatActivity() {
               address = device.lastAddress,
               metadataJson = device.lastMetadataJson,
               vendorRegistry = vendorRegistry,
-              assignedNumbers = assignedNumbers
+              assignedNumbers = assignedNumbers,
+              userCustomName = device.userCustomName
             )
             binding.detailName.text = identity.title
             val identityLines = mutableListOf<String>()
@@ -166,6 +168,7 @@ class DeviceDetailActivity : AppCompatActivity() {
             }
             binding.detailIdentity.isVisible = identityLines.isNotEmpty()
             binding.detailIdentity.text = identityLines.joinToString("\n")
+            updateSharedOrigin(device.sharedFromGroupIds)
             binding.detailKey.text = "Device key: ${device.deviceKey}"
             binding.detailFirstSeen.text = "First seen: ${Formatters.formatTimestamp(device.firstSeen)}"
             binding.detailLastSeen.text = "Last seen: ${Formatters.formatTimestamp(device.lastSeen)}"
@@ -208,6 +211,7 @@ class DeviceDetailActivity : AppCompatActivity() {
 
   override fun onPrepareOptionsMenu(menu: Menu): Boolean {
     val exportReady = currentDevice != null
+    menu.findItem(ninja.unagi.R.id.menu_rename_device)?.isEnabled = exportReady
     menu.findItem(ninja.unagi.R.id.menu_copy_device_json)?.isEnabled = exportReady
     menu.findItem(ninja.unagi.R.id.menu_save_device_json)?.isEnabled = exportReady
     menu.findItem(ninja.unagi.R.id.menu_share_device_json)?.isEnabled = exportReady
@@ -216,6 +220,10 @@ class DeviceDetailActivity : AppCompatActivity() {
 
   override fun onOptionsItemSelected(item: MenuItem): Boolean {
     return when (item.itemId) {
+      ninja.unagi.R.id.menu_rename_device -> {
+        showRenameDialog()
+        true
+      }
       ninja.unagi.R.id.menu_copy_device_json -> {
         copyCurrentDeviceJson()
         true
@@ -235,6 +243,32 @@ class DeviceDetailActivity : AppCompatActivity() {
   override fun onSupportNavigateUp(): Boolean {
     finish()
     return true
+  }
+
+  private fun showRenameDialog() {
+    val device = currentDevice ?: return
+    val input = android.widget.EditText(this).apply {
+      setText(device.userCustomName ?: device.displayName.orEmpty())
+      hint = getString(ninja.unagi.R.string.rename_device_hint)
+      selectAll()
+    }
+    val container = android.widget.FrameLayout(this).apply {
+      val margin = (16 * resources.displayMetrics.density).toInt()
+      setPadding(margin, margin / 2, margin, 0)
+      addView(input)
+    }
+    com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+      .setTitle(ninja.unagi.R.string.rename_device_title)
+      .setView(container)
+      .setMessage(ninja.unagi.R.string.rename_device_clear_hint)
+      .setPositiveButton(android.R.string.ok) { _, _ ->
+        val newName = input.text.toString().trim().takeIf(String::isNotEmpty)
+        lifecycleScope.launch {
+          repository.setUserCustomName(device.deviceKey, newName)
+        }
+      }
+      .setNegativeButton(android.R.string.cancel, null)
+      .show()
   }
 
   private fun runBleQuery(device: DeviceEntity, metadata: ObservationMetadata) {
@@ -426,6 +460,26 @@ class DeviceDetailActivity : AppCompatActivity() {
       return ContentUris.withAppendedId(collection, cursor.getLong(idIndex))
     }
     return null
+  }
+
+  private fun updateSharedOrigin(sharedFromGroupIds: String?) {
+    if (sharedFromGroupIds == null) {
+      binding.detailSharedOrigin.isVisible = false
+      return
+    }
+    binding.detailSharedOrigin.isVisible = true
+    val groupIds = sharedFromGroupIds.split(",").filter(String::isNotBlank)
+    lifecycleScope.launch {
+      val names = groupIds.mapNotNull { id ->
+        affinityGroupRepository.getGroup(id)?.groupName
+      }
+      val label = if (names.isNotEmpty()) {
+        "Shared from: ${names.joinToString(", ")}"
+      } else {
+        "Shared from ${groupIds.size} group${if (groupIds.size != 1) "s" else ""}"
+      }
+      binding.detailSharedOrigin.text = label
+    }
   }
 
   companion object {

@@ -18,5 +18,8 @@ data class DeviceEntity(
   val rssiMax: Int,
   val rssiAvg: Double,
   val lastMetadataJson: String?,
-  val starred: Boolean
+  val starred: Boolean,
+  val userCustomName: String? = null,
+  /** Comma-separated group IDs this device was imported from. Null = local-only. */
+  val sharedFromGroupIds: String? = null
 )

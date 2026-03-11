@@ -60,7 +60,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             address = it.lastAddress,
             metadataJson = it.lastMetadataJson,
             vendorRegistry = vendorRegistry,
-            assignedNumbers = assignedNumbers
+            assignedNumbers = assignedNumbers,
+            userCustomName = it.userCustomName
           )
           val metaParts = mutableListOf<String>()
           identity.classificationLabel?.let { label ->
@@ -100,7 +101,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             sightingsCount = it.sightingsCount,
             starred = it.starred,
             lastAddress = it.lastAddress,
-            vendorName = identity.vendorName
+            vendorName = identity.vendorName,
+            sharedFromGroupIds = it.sharedFromGroupIds
           )
         }
       }

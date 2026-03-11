@@ -2,12 +2,16 @@ package ninja.unagi
 
 import android.app.Application
 import ninja.unagi.alerts.DefaultAlertSeeder
+import ninja.unagi.scan.ObservationRecorder
 import ninja.unagi.scan.ScanController
+import ninja.unagi.sdr.SdrController
 import ninja.unagi.alerts.DeviceAlertNotifier
 import ninja.unagi.data.AppDatabase
 import ninja.unagi.data.AlertRuleRepository
 import ninja.unagi.data.DeviceEnrichmentRepository
+import ninja.unagi.data.AffinityGroupRepository
 import ninja.unagi.data.DeviceRepository
+import ninja.unagi.group.GroupKeyManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,23 +29,28 @@ class ThingAlertApp : Application() {
   val alertRuleRepository: AlertRuleRepository by lazy {
     AlertRuleRepository(database.alertRuleDao())
   }
+  val affinityGroupRepository: AffinityGroupRepository by lazy {
+    AffinityGroupRepository(database.affinityGroupDao())
+  }
   val deviceAlertNotifier: DeviceAlertNotifier by lazy {
     DeviceAlertNotifier(this)
   }
+  val observationRecorder: ObservationRecorder by lazy {
+    ObservationRecorder(repository, alertRuleRepository, deviceAlertNotifier, applicationScope)
+  }
   val scanController: ScanController by lazy {
-    ScanController(
-      this,
-      applicationScope,
-      repository,
-      alertRuleRepository,
-      deviceAlertNotifier
-    )
+    ScanController(this, applicationScope, observationRecorder)
+  }
+  val sdrController: SdrController by lazy {
+    SdrController(this, applicationScope, observationRecorder)
   }
 
   override fun onCreate() {
     super.onCreate()
     applicationScope.launch {
       DefaultAlertSeeder.seedIfNeeded(this@ThingAlertApp, alertRuleRepository)
+      // P3: Keystore migration runs after DB is open (SQLCipher migration happens in AppDatabase.build)
+      GroupKeyManager.migrateToV2IfNeeded(this@ThingAlertApp, affinityGroupRepository)
     }
   }
 }
